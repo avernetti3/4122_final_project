@@ -19,6 +19,7 @@ using namespace std;
 const double EulerC = exp(1.0);
 const float PI = 3.14159265358979f;
 
+
 // Separate the array into two halves of the array, the first
 // half being even and the second half being odd
 void split(Complex* inData, int size) {
@@ -44,17 +45,36 @@ void FFT(Complex *inData, int size) {
 		split(inData, size);
 		FFT(inData, (size/2)); // FFT the even indices
 		FFT(inData+(size/2), (size/2)); // FFT the odd indices
-
 		// Recombine the data
 		for(int i=0;i<size/2;i++) {
 			Complex even = inData[i];
 			Complex odd = inData[i+(size/2)];
 			// Complex t = polar(1.0, -2*PI*i/size) * odd;
-			Complex w = Complex(cos(2*PI*i/size),-1*sin(2*PI*i/size));
+			Complex w = Complex(cos(-2.*PI*i/size), sin(-2.*PI*i/size));
 			inData[i] = even + w*odd;
 			inData[i+(size/2)] = even - w*odd;
 		}
 	}
+}
+
+
+// Regular implementation of Fourier Transform
+void DFT(Complex* inData, int size) {
+	Complex* H = new Complex[size];
+	Complex sum;
+	for (int i=0;i<size;i++) {
+		sum = (0,0);
+		for (int j=0;j<size;j++) {
+			Complex w = Complex(cos(-2.*PI*i*j/size), sin(-2*PI*i*j/size));
+			sum = sum + inData[j]*w;
+		}
+		H[i] = sum;
+	}
+	// Put values back
+	for (int i=0;i<size;i++) {
+		inData[i] = H[i];
+	}
+	delete [] H;
 }
 
 // Matrix transpose function (works)
@@ -117,8 +137,19 @@ int main(int argc, char* argv[])
 
     	//data1[] contains all elements to use w/ MPI for FFT
 
-		FFT(data1, size);
+    	// Do FFT on each row, then transpose and do on each column
+    	FFT(data1,4);
+    	FFT(data1+4,4);
+    	FFT(data1+8,4);
+    	FFT(data1+12,4);
+    	transpose(data1, size);
+    	FFT(data1,4);
+    	FFT(data1+4,4);
+    	FFT(data1+8,4);
+    	FFT(data1+12,4);
+    	transpose(data1, size);
 
+		// Output for debugging
 		for (int i = 0; i < size; i++) {
 			cout << i <<  " = " << data1[i] << endl;
 		}
