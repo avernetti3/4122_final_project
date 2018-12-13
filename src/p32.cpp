@@ -96,6 +96,17 @@ void transpose(Complex* inData, int size) {
 	delete [] tPosed;
 }
 
+// Function to write out to a file
+void output(char* fileName, Complex* outData, int width) {
+	ofstream outFile;
+	outFile.open(fileName);
+	for(int i=0;i<width;i++) {
+ 		for(int j=0;j<width;j++) {
+   			outFile << outData[i*width+j] << " ";
+  		}
+ 		outFile << "\n";
+ 	}
+}
 
 int main(int argc, char* argv[]) 
 {
@@ -150,6 +161,9 @@ int main(int argc, char* argv[])
 	for (int i = 0; i < size; i++) {
 		cout << i <<  " = " << data1[i] << endl;
 	}
+		
+	// Output to file
+	output(argv[3], data1, width);
     
         //TODO: Write MPI Code using the processed data found above
     }
