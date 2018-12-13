@@ -24,7 +24,7 @@ Complex Complex::operator+(const Complex &b) const {
 Complex Complex::operator-(const Complex &b) const {
  Complex a;
  a.real = this->real - b.real;
- a.imag = this->real - b.imag;
+ a.imag = this->imag - b.imag;
  return a;
 }
 
