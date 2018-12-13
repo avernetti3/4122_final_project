@@ -35,7 +35,7 @@ void split(Complex* inData, int size) {
 	delete[] cpyData;
 }
 
-// MPI FFT using the Danielson-Lanczos Algorithm
+// MPI FFT using the Danielson-Lanczos Algorithm (doesn't work)
 void FFT(Complex *inData, int size) {
 	if (size<2) {
 		// Return at bottom of recursion
@@ -55,6 +55,25 @@ void FFT(Complex *inData, int size) {
 			inData[i+(size/2)] = even - w*odd;
 		}
 	}
+}
+
+// Matrix transpose function (works)
+void transpose(Complex* inData, int size) {
+	Complex* tPosed = new Complex[size];
+	// Transpose values to new matrix
+	int w = sqrt(size);
+	for (int i=0;i<w;i++) {
+		for (int j=0;j<w;j++) {
+			tPosed[j*w+i] = inData[j+w*i];
+		}
+	}
+	// Put back in original matrix 
+	for (int i=0;i<w;i++) {
+		for (int j=0;j<w;j++) {
+			inData[i*w+j] = tPosed[i*w+j];
+		}
+	}
+	delete [] tPosed;
 }
 
 
@@ -96,14 +115,15 @@ int main(int argc, char* argv[])
         	}
     	}
 
+    	//data1[] contains all elements to use w/ MPI for FFT
+
 		FFT(data1, size);
 
 		for (int i = 0; i < size; i++) {
 			cout << i <<  " = " << data1[i] << endl;
 		}
-        //data1[] contains all elements to pass to GPU for FFT
     
-        //TODO: Write GPU Code using the processed data found above
+        //TODO: Write MPI Code using the processed data found above
     }
 
     //MPI_Finalize();
