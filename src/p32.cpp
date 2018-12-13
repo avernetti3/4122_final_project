@@ -36,7 +36,7 @@ void split(Complex* inData, int size) {
 	delete[] cpyData;
 }
 
-// MPI FFT using the Danielson-Lanczos Algorithm (doesn't work)
+// MPI FFT using the Danielson-Lanczos Algorithm (works)
 void FFT(Complex *inData, int size) {
 	if (size<2) {
 		// Return at bottom of recursion
@@ -138,21 +138,18 @@ int main(int argc, char* argv[])
     	//data1[] contains all elements to use w/ MPI for FFT
 
     	// Do FFT on each row, then transpose and do on each column
-    	FFT(data1,4);
-    	FFT(data1+4,4);
-    	FFT(data1+8,4);
-    	FFT(data1+12,4);
+    	for(int j=0;j<2;j++) {
+    		if(j==1) {transpose(data1, size);}
+    		for(int i=0;i<height;i++) {
+    			FFT(data1+width*i,width);
+    		}
+    	}
     	transpose(data1, size);
-    	FFT(data1,4);
-    	FFT(data1+4,4);
-    	FFT(data1+8,4);
-    	FFT(data1+12,4);
-    	transpose(data1, size);
-
-		// Output for debugging
-		for (int i = 0; i < size; i++) {
-			cout << i <<  " = " << data1[i] << endl;
-		}
+		
+	// Output for debugging
+	for (int i = 0; i < size; i++) {
+		cout << i <<  " = " << data1[i] << endl;
+	}
     
         //TODO: Write MPI Code using the processed data found above
     }
