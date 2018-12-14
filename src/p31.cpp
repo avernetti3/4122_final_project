@@ -1,6 +1,6 @@
 /******************************************/
 /* Peter C. Loiacono                      */
-/* Andy Vernetti                          */
+/* Andy Vernetti						  */
 /* Computes FFT using CPU multi-threading */ 
 /******************************************/
 
@@ -11,6 +11,7 @@
 #include <iostream>
 #include <stdlib.h>
 #include <thread>
+#include <chrono>
 
 #include "input_image.h"
 #include "complex.h"
@@ -64,8 +65,10 @@ void transpose(Complex* inData, int size) {
 }
 
 
-int main(int argc, char* argv[]) 
-{
+int main(int argc, char* argv[]) {
+
+	auto start = chrono::high_resolution_clock::now();
+
 	int width, height;
 	/******************/
 	/* Process inputs */
@@ -151,14 +154,22 @@ int main(int argc, char* argv[])
         // Transpose back to original orientation
         transpose(data1, size);
 
+        /*
         // Output for debugging
 		for (int i = 0; i < size/4; i++) {
 			cout << i <<  " = " << data1[i] << endl;
 		}
+		*/
 
 		// Output to file
 		inImage.save_image_data(argv[3], data1, width, height);
 
     }
+
+    auto stop = chrono::high_resolution_clock::now();
+    auto duration = chrono::duration_cast<chrono::milliseconds>(stop-start);
+
+    cout << "Time: " << duration.count() << " ms\n";
+
     return 0;
 }
