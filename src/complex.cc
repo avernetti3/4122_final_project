@@ -15,6 +15,7 @@ Complex::Complex(float r) : real(r), imag(0.0f) {}
 Complex::Complex(float r, float i) : real(r), imag(i) {}
 
 Complex Complex::operator+(const Complex &b) const {
+
  Complex a;
  a.real = this->real + b.real;
  a.imag = this->imag + b.imag;
@@ -77,4 +78,5 @@ std::ostream& operator<< (std::ostream& os, const Complex& rhs) {
         os << "(" << c.real << "," << c.imag << ")";
     }
     return os;
+
 }
