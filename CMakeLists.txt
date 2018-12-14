@@ -5,6 +5,7 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Werror")
 
 find_package(MPI REQUIRED)
 find_package(CUDA QUIET REQUIRED)
+find_package(Threads)
 
 SET(CUDA_NVCC_FLAGS ${CUDA_NVCC_FLAGS};-std=c++11;)
 
@@ -41,6 +42,7 @@ add_executable(p31 ${SOURCE_FILES_1})
 add_executable(p32 ${SOURCE_FILES_2})
 CUDA_ADD_EXECUTABLE(p33 ${SOURCE_FILES_3})
 
+target_link_libraries(p31 ${CMAKE_THREAD_LIBS_INIT})
 target_link_libraries(p32 ${MPI_LIBRARIES})
 
 if(MPI_COMPILE_FLAGS)
