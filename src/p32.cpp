@@ -162,8 +162,8 @@ int main(int argc, char* argv[])
 		cout << i <<  " = " << data1[i] << endl;
 	}
 		
-	// Output to file
-	output(argv[3], data1, width);
+	// Output to file (updated to use given function)
+	in.save_image_data(argv[3], data1, width, height);
     
         //TODO: Write MPI Code using the processed data found above
     }
