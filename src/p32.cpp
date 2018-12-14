@@ -11,6 +11,7 @@ Source Code for MPI implementation of FFT
 #include <iostream>
 #include <stdlib.h>
 
+#include "mpi.h"
 #include "input_image.h"
 #include "complex.h"
 
@@ -58,7 +59,7 @@ void FFT(Complex *inData, int size) {
 }
 
 
-// Regular implementation of Fourier Transform
+// Regular implementation of Fourier Transform (for threads)
 void DFT(Complex* inData, int size) {
 	Complex* H = new Complex[size];
 	Complex sum;
@@ -96,79 +97,147 @@ void transpose(Complex* inData, int size) {
 	delete [] tPosed;
 }
 
-// Function to write out to a file
-void output(char* fileName, Complex* outData, int width) {
-	ofstream outFile;
-	outFile.open(fileName);
-	for(int i=0;i<width;i++) {
- 		for(int j=0;j<width;j++) {
-   			outFile << outData[i*width+j] << " ";
-  		}
- 		outFile << "\n";
- 	}
-}
+
 
 int main(int argc, char* argv[]) 
 {
-	/*
 	// Initialize MPI environment
 	MPI_Init(NULL, NULL);
 
 	// Set up variables related to MPI
-	int world_rank;
+	int world_rank, world_size;
 	MPI_Comm_rank(MPI_COMM_WORLD, &world_rank);
-	int world_size;
 	MPI_Comm_size(MPI_COMM_WORLD, &world_size);
-	*/
+
+	// Set up MPI complex class
+	MPI_Datatype mpi_complex;
+	MPI_Type_contiguous(2, MPI_FLOAT, &mpi_complex);
+	MPI_Type_commit(&mpi_complex);
 
 	int width, height;
 	/******************/
 	/* Process inputs */
 	/******************/
-	if (argc != 4) {
+	if (argc != 4 && world_rank == 0) {
 		cout << "Please format command as: ./p32 <forward> <INPUTFILE> <OUTPUTFILE>" << endl;
 	} 
 	else {
         InputImage in(argv[2]);
         width  = in.get_width();
-        cout << width << endl;
+        //cout << width << endl;
         height = in.get_height();
-        cout << height << endl;
+        //cout << height << endl;
 
         int size = width*height;
         Complex data1[size];
         Complex* data2 = in.get_image_data();
 
+        // Set variables to use with data accessing
+        int procsUsed;
+        int dataPerNode;
+        if (height<=world_size) {
+        	procsUsed = height;
+        	dataPerNode = 1;
+        }
+        else {
+        	procsUsed = world_size;
+        	dataPerNode = height/world_size;
+        }
+
+		/*
+		// Debugging ouput
+		if (world_rank == 0) {
+			cout << "Number of processors used: " << procsUsed << "\n";
+			cout << "Datapoints per proc: " << dataPerNode << "\n";
+		}
+		*/
+
+		//data1[] contains all elements to use w/ MPI for FFT
 		for (int i = 0; i < size; i++) {
 			data1[i] = data2[i]; 
 			if (i<size){ 
-				cout << i <<  " = " << data1[i] << endl;
+				//cout << i <<  " = " << data1[i] << endl;
         	}
     	}
 
-    	//data1[] contains all elements to use w/ MPI for FFT
+    	// Do FFT on each row with MPI
+    	int offset = world_rank*width*dataPerNode;
+    	if (world_rank<procsUsed) {
+	    	for(int i=0;i<dataPerNode;i++) {
+	    		FFT(data1+offset+width*i, width);
+			}
+		}
 
-    	// Do FFT on each row, then transpose and do on each column
-    	for(int j=0;j<2;j++) {
-    		if(j==1) {transpose(data1, size);}
-    		for(int i=0;i<height;i++) {
-    			FFT(data1+width*i,width);
-    		}
-    	}
-    	transpose(data1, size);
-		
-	// Output for debugging
-	for (int i = 0; i < size; i++) {
-		cout << i <<  " = " << data1[i] << endl;
-	}
-		
-	// Output to file (updated to use given function)
-	in.save_image_data(argv[3], data1, width, height);
+		// Pass data back to master rank
+		for(int i=1;i<procsUsed;i++) {
+			if(world_rank==i) {
+				MPI_Send(&data1[offset], width*dataPerNode, mpi_complex, 0, 0, MPI_COMM_WORLD);
+			}
+			if(world_rank==0) {
+				MPI_Recv(&data1[i*width*dataPerNode], width*dataPerNode, mpi_complex, i, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+			}
+		}		
+
+		MPI_Barrier(MPI_COMM_WORLD);
+
+		// Transpose data on master rank
+		if (world_rank==0) {
+			transpose(data1, size);
+		}
+
+		MPI_Barrier(MPI_COMM_WORLD);
+
+		// Pass data back out
+		for(int i=1;i<procsUsed;i++) {
+			if(world_rank==0) {
+				MPI_Send(&data1[i*width*dataPerNode], width*dataPerNode, mpi_complex, i, 0, MPI_COMM_WORLD);
+			}
+			if(world_rank==i) {
+				MPI_Recv(&data1[offset], width*dataPerNode, mpi_complex, 0, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+			}
+		}
+
+		// Do FFT on transformed and transposed rows
+		if (world_rank<procsUsed) {
+	    	for(int i=0;i<dataPerNode;i++) {
+	    		FFT(data1+offset+width*i, width);
+			}
+		}
+
+		// Collect data on master rank again
+		for(int i=1;i<procsUsed;i++) {
+			if(world_rank==i) {
+				MPI_Send(&data1[offset], width*dataPerNode, mpi_complex, 0, 0, MPI_COMM_WORLD);
+			}
+			if(world_rank==0) {
+				MPI_Recv(&data1[i*width*dataPerNode], width*dataPerNode, mpi_complex, i, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+			}
+		}	
+
+		MPI_Barrier(MPI_COMM_WORLD);
+
+		// Transpose data back to original orientation
+		if (world_rank==0) {
+			transpose(data1, size);
+		}
+
+		MPI_Barrier(MPI_COMM_WORLD);
+    	
+		// Output for debugging
+		/*
+		if (world_rank==0) {
+			for (int i = 0; i < size; i++) {
+				cout << i <<  " = " << data1[i] << endl;
+			}
+		}
+		*/
+
+		// Output to file (updated to use given function)
+		if(world_rank==0) {in.save_image_data(argv[3], data1, width, height);}
     
-        //TODO: Write MPI Code using the processed data found above
     }
 
-    //MPI_Finalize();
+    MPI_Finalize();
 
 	return 0;
 }
