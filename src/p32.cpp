@@ -10,6 +10,7 @@ Source Code for MPI implementation of FFT
 #include <fstream>
 #include <iostream>
 #include <stdlib.h>
+#include <chrono>
 
 #include "mpi.h"
 #include "input_image.h"
@@ -17,7 +18,6 @@ Source Code for MPI implementation of FFT
 
 using namespace std;
 
-const double EulerC = exp(1.0);
 const float PI = 3.14159265358979f;
 
 
@@ -101,6 +101,8 @@ void transpose(Complex* inData, int size) {
 
 int main(int argc, char* argv[]) 
 {
+	auto start = chrono::high_resolution_clock::now();
+
 	// Initialize MPI environment
 	MPI_Init(NULL, NULL);
 
@@ -144,7 +146,7 @@ int main(int argc, char* argv[])
         	dataPerNode = height/world_size;
         }
 
-		/*
+        /*
 		// Debugging ouput
 		if (world_rank == 0) {
 			cout << "Number of processors used: " << procsUsed << "\n";
@@ -233,11 +235,17 @@ int main(int argc, char* argv[])
 		*/
 
 		// Output to file (updated to use given function)
-		if(world_rank==0) {in.save_image_data(argv[3], data1, width, height);}
-    
+		if(world_rank==0) {in.save_image_data(argv[3], data1, width, height);}    
     }
 
+
+
     MPI_Finalize();
+
+    auto stop = chrono::high_resolution_clock::now();
+    auto duration = chrono::duration_cast<chrono::milliseconds>(stop-start);
+
+    cout << "Time: " << duration.count() << " ms\n";
 
 	return 0;
 }
