@@ -10,8 +10,8 @@
 #include <iostream>
 #include <stdlib.h>
 
-#include "input_image.cc"
-#include "complex.cc"
+#include "input_image.cuh"
+#include "complex.cuh"
 
 #define T_P_B 512
 
@@ -22,61 +22,31 @@ using namespace std;
 /* GPU device functions */ 
 /************************/
 
-// Orders input so even indices contained in first half
-// and odd indices in second
-/*__device__ void split(Complex *inData, int size) {
-	Complex *cpyData = new Complex[size/2];
-	for (int i=0; i < size/2; i++) {
-		cpyData[i] = inData[i*2 + 1];
+__global__ void DFT(Complex* inData, int size) {
+
+	Complex* H = new Complex[size];
+	Complex sum;
+	for (int i=0;i<size;i++) {
+		sum = (0,0);
+		for (int j=0;j<size;j++) {
+			Complex w = Complex(cos(-2.*PI*i*j/size), sin(-2*PI*i*j/size));
+			sum = sum + inData[j]*w;
+		}
+		H[i] = sum;
 	}
-	for (int i=0; i < size/2; i++) {
-		inData[i] = inData[i*2]; 
+	// Put values back
+	for (int i=0;i<size;i++) {
+		inData[i] = H[i];
 	}
-	for (int i=0; i < size/2; i++) {
-		inData[i+size/2] = cpyData[i];
-	}
-	delete[] cpyData;
-} */
-
-// Computes Danielson-Lanczos FFT
-__device__ void FFT(Complex *inData, int size) {
-	if (size < 2) {
-	   //End of stack, do nothing
-	} else {
-		//split(inData, size);
-
-		// Split code 	
-		for (int i=0; i < size/2; i++) {
-			cpyData[i] = inData[i*2 + 1];
-		}
-		for (int i=0; i < size/2; i++) {
-			inData[i] = inData[i*2]; 
-		}
-		for (int i=0; i < size/2; i++) {
-			inData[i+size/2] = cpyData[i];
-		}
-		delete[] cpyData;
-
-
-		FFT(inData, size/2);
-		FFT(inData+size/2, size/2);
-
-		for (int i=0; i < size/2; i++) {
-			Complex even     = inData[i];
-			Complex odd      = inData[i+size/2];
-			Complex w        = Complex(cos(-2.*PI*i/size), sin(-2.*PI*i/size));
-			inData[i]        = even + w * odd;
-			inData[i+size/2] = even - w * odd; 
-		}
-	} 
-} 
+	delete [] H;
+}
 
 
 // Computes transpose of given Complex array
-__device__ void transpose(Complex* inData, int size) {
+__global__ void transpose(Complex *inData, int size, int sqrt_val) {
 	Complex* tPosed = new Complex[size];
 	// Transpose values to new matrix
-	int w = sqrt(size);
+	int w = sqrt_val;
 	for (int i=0;i<w;i++) {
 		for (int j=0;j<w;j++) {
 			tPosed[j*w+i] = inData[j+w*i];
@@ -91,22 +61,6 @@ __device__ void transpose(Complex* inData, int size) {
 	delete [] tPosed;
 }
 
-/*******************/
-/* Helper Funtions */
-/*******************/
-
-// Outputs data into text file with specified name from input
-void output(char* fileName, Complex* outData, int width) {
-	ofstream outFile;
-	outFile.open(fileName);
-	for(int i=0;i<width;i++) {
- 		for(int j=0;j<width;j++) {
-   			outFile << outData[i*width+j] << " ";
-  		}
- 		outFile << "\n";
- 	}
-}
-
 int main(int argc, char* argv[]) 
 {
 	int width, height;
@@ -116,22 +70,20 @@ int main(int argc, char* argv[])
 	if (argc != 4) {
 		cout << "Please format command as: ./p33 <forward> <INPUTFILE> <OUTPUTFILE>" << endl;
 	} else {
-        InputImage in(argv[2]);
-        width  = in.get_width();
+        InputImage inImage(argv[2]);
+        width  = inImage.get_width();
         //cout << width << endl;
-        height = in.get_height();
+        height = inImage.get_height();
         //cout << height << endl;
 
         int size = width*height;
         Complex data1[size];
-        Complex* data2 = in.get_image_data();
+        Complex* data2 = inImage.get_image_data();
 
 		for (int i = 0; i < size; i++) {
 			data1[i] = data2[i]; 
 			//cout << i <<  " = " << data1[i] << endl;
         }
-
-		FFT(data1, size);
 
 		/*for (int i = 0; i < size/4; i++) {
 			//cout << i <<  " = " << data1[i] << endl;
@@ -144,37 +96,60 @@ int main(int argc, char* argv[])
 		/************************/
 
 		// Device arrays
-		Complex *d_in, *d_out;
-		// Local arrays
-		Complex in[size], out[size];
+		Complex *d_array;
 
-		// Copy data into array to be used by GPU
-		for (int i = 0; i < size; i++) {
-			in[i] = data1[i]; 
-			//cout << i <<  " = " << data1[i] << endl;
-        }
+		cudaMalloc((void**)&d_array, size*sizeof(Complex));
 
-		cudaMalloc((void**)&d_in, size*sizeof(Complex));
+		// Logic for calculating 2D DFT using defined device functions
+		for(int i=0; i<height; i++) {
+			Complex tmp[height];
+
+			for (int j=0; j<width; j++) {
+				tmp[j] = data1[width*i + j];
+			}
+
+			cudaMemcpy(d_array, tmp, height*sizeof(Complex), cudaMemcpyHostToDevice);
+			DFT<<<1,1>>>(d_array, width);
+			cudaMemcpy(tmp, d_array, height*sizeof(Complex), cudaMemcpyDeviceToHost);
+
+			for (int j=0; j<width; j++) {
+				data1[width*i + j] = tmp[j];
+			}
+		}
 		
-		// Logic for calculating 2D FFT using defined device functions
-		for(int i=0; i<2; i++) {
-    		if (i == 1) {
-				cudaMemcpy(d_in, in, size*sizeof(Complex), cudaMemcpyHostToDevice);
-				transpose<<<((size + T_P_B-1) / T_P_B), T_P_B>>>(d_in, size);
-				cudaMemcpy(out, d_out, size*sizeof(Complex), cudaMemcpyHostToDevice);
-    		}
-    		for(int j=0;j<height;j++) {
-    			cudaMemcpy(d_in, in, size*sizeof(Complex), cudaMemcpyHostToDevice);
-				FFT<<<((size + T_P_B-1) / T_P_B), T_P_B>>>(d_in, size);
-				cudaMemcpy(out, d_out, size*sizeof(Complex), cudaMemcpyHostToDevice);
-    		}
-    	}
+		int sqrt_val = sqrt(size);
+		cout << sqrt_val << endl;
+		cudaMemcpy(d_array, data1, size*sizeof(Complex), cudaMemcpyHostToDevice);
+		transpose<<<1,1>>>(d_array, size, sqrt_val);
+		cudaMemcpy(data1, d_array, size*sizeof(Complex), cudaMemcpyDeviceToHost);
 
-    	output(argv[3], out, width);
+
+		
+		for(int i=0; i<height; i++) {
+                        Complex tmp[height];
+
+                        for (int j=0; j<width; j++) {
+                                tmp[j] = data1[width*i + j];
+                        }
+
+                        cudaMemcpy(d_array, tmp, height*sizeof(Complex), cudaMemcpyHostToDevice);
+                        DFT<<<1,1>>>(d_array, width);
+                        cudaMemcpy(tmp, d_array, height*sizeof(Complex), cudaMemcpyDeviceToHost);
+
+                        for (int j=0; j<width; j++) {
+                                data1[width*i + j] = tmp[j];
+                        }
+                }
+
+		sqrt_val = sqrt(size);
+		cudaMemcpy(d_array, data1, size*sizeof(Complex), cudaMemcpyHostToDevice);
+		transpose<<<1,1>>>(data1, size, sqrt_val);
+		cudaMemcpy(data1, d_array, size*sizeof(Complex), cudaMemcpyDeviceToHost);
+
+    	inImage.save_image_data(argv[3], data1, width, height);
 
     	// Garbage collection of memory
-        cudaFree(d_in);
-        cudaFree(d_out);
+        cudaFree(d_array);
     }
 	return 0;
 }
